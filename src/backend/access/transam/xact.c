@@ -1114,7 +1114,7 @@ AtSubStart_ResourceOwner(void)
  * If you change this function, see RecordTransactionCommitPrepared also.
  */
 static TransactionId
-RecordTransactionCommit(void)
+RecordTransactionCommit(XLogRecPtr* syncFlushPtr)
 {
 	TransactionId xid = GetTopTransactionIdIfAny();
 	bool		markXidCommitted = TransactionIdIsValid(xid);
@@ -1127,6 +1127,8 @@ RecordTransactionCommit(void)
 	SharedInvalidationMessage *invalMessages = NULL;
 	bool		RelcacheInitFileInval = false;
 	bool		wrote_xlog;
+
+	*syncFlushPtr = InvalidXLogRecPtr;
 
 	/* Get data needed for commit record */
 	nrels = smgrGetPendingDeletes(true, &rels);
@@ -1276,7 +1278,7 @@ RecordTransactionCommit(void)
 	 * anyway if we crash.)
 	 */
 	if ((wrote_xlog && markXidCommitted &&
-		 synchronous_commit > SYNCHRONOUS_COMMIT_OFF) ||
+		 synchronous_commit > SYNCHRONOUS_COMMIT_LOCAL_FLUSH_NON_DURABLE_READS) ||
 		forceSyncCommit || nrels > 0)
 	{
 		XLogFlush(XactLastRecEnd);
@@ -1286,6 +1288,14 @@ RecordTransactionCommit(void)
 		 */
 		if (markXidCommitted)
 			TransactionIdCommitTree(xid, nchildren, children);
+	}
+	else if (synchronous_commit == SYNCHRONOUS_COMMIT_LOCAL_FLUSH_NON_DURABLE_READS && wrote_xlog && markXidCommitted)
+	{
+		TransactionIdAsyncCommitTree(xid, nchildren, children, XactLastRecEnd);
+		*syncFlushPtr = XactLastRecEnd;
+		/* so we end the crit section without doing either XLogSetAsyncXactLSN or XLogFlush
+                   i think this is safe because it is the clog/xlog that need to be updated inside
+                   the critical section but not necessarily flushed */
 	}
 	else
 	{
@@ -1935,6 +1945,7 @@ CommitTransaction(void)
 	TransactionState s = CurrentTransactionState;
 	TransactionId latestXid;
 	bool		is_parallel_worker;
+	XLogRecPtr syncFlushPtr = InvalidXLogRecPtr;
 
 	is_parallel_worker = (s->blockState == TBLOCK_PARALLEL_INPROGRESS);
 
@@ -2033,7 +2044,7 @@ CommitTransaction(void)
 		 * We need to mark our XIDs as committed in pg_xact.  This is where we
 		 * durably commit.
 		 */
-		latestXid = RecordTransactionCommit();
+		latestXid = RecordTransactionCommit(&syncFlushPtr);
 	}
 	else
 	{
@@ -2105,6 +2116,11 @@ CommitTransaction(void)
 	ResourceOwnerRelease(TopTransactionResourceOwner,
 						 RESOURCE_RELEASE_AFTER_LOCKS,
 						 true, true);
+
+	if (!XLogRecPtrIsInvalid(syncFlushPtr))
+	{
+		XLogFlush(syncFlushPtr);
+	}
 
 	/*
 	 * Likewise, dropping of files deleted during the transaction is best done

@@ -366,6 +366,7 @@ static const struct config_enum_entry synchronous_commit_options[] = {
 	{"remote_apply", SYNCHRONOUS_COMMIT_REMOTE_APPLY, false},
 	{"on", SYNCHRONOUS_COMMIT_ON, false},
 	{"off", SYNCHRONOUS_COMMIT_OFF, false},
+	{"local_non_durable_reads", SYNCHRONOUS_COMMIT_LOCAL_FLUSH_NON_DURABLE_READS, false},
 	{"true", SYNCHRONOUS_COMMIT_ON, true},
 	{"false", SYNCHRONOUS_COMMIT_OFF, true},
 	{"yes", SYNCHRONOUS_COMMIT_ON, true},

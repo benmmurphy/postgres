@@ -64,6 +64,7 @@ extern bool XactDeferrable;
 typedef enum
 {
 	SYNCHRONOUS_COMMIT_OFF,		/* asynchronous commit */
+	SYNCHRONOUS_COMMIT_LOCAL_FLUSH_NON_DURABLE_READS,
 	SYNCHRONOUS_COMMIT_LOCAL_FLUSH, /* wait for local flush only */
 	SYNCHRONOUS_COMMIT_REMOTE_WRITE,	/* wait for local flush and remote
 										 * write */
