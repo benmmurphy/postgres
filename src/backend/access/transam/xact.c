@@ -2119,7 +2119,9 @@ CommitTransaction(void)
 
 	if (!XLogRecPtrIsInvalid(syncFlushPtr))
 	{
+		START_CRIT_SECTION();
 		XLogFlush(syncFlushPtr);
+		END_CRIT_SECTION();
 	}
 
 	/*
